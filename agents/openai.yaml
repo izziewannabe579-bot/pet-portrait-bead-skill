@@ -1,0 +1,4 @@
+interface:
+  display_name: "宠物手绘头像与拼豆图纸"
+  short_description: "从宠物照片或指定底稿制作手绘水粉头像及自由配色复杂版拼豆图纸"
+  default_prompt: "使用 $pet-portrait-beads，参考我的宠物照片和风格图，制作保留表情的头像与 52×52 复杂版拼豆图纸。"

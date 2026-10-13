@@ -1,0 +1,9 @@
+{
+  "name": "pet-portrait-beads",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hand-painted pet portrait workflow and unrestricted RGB bead-chart exporter",
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node scripts/test.cjs" },
+  "dependencies": { "sharp": "0.34.5" }
+}
