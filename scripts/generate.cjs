@@ -3,17 +3,19 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('sharp');
+const smoothColors = require('./smooth-colors.cjs');
 
 const escapeXml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
 const toHex = p => '#' + p.map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
 const toRgb = h => h.slice(1).match(/../g).map(v => parseInt(v, 16));
 
 function parse(args) {
-  const opts = { size: 52, title: '宠物头像 · 手绘复杂版', background: 'auto', whiteThreshold: 240, fullLegend: false };
+  const opts = { size: 52, title: '宠物头像 · 手绘色块版', background: 'auto', whiteThreshold: 240, fullLegend: false, smoothing: true };
   const names = { '--size':'size', '--out':'out', '--title':'title', '--background':'background', '--white-threshold':'whiteThreshold' };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a === '--full-legend') opts.fullLegend = true;
+    if (a === '--raw-colors') opts.smoothing = false;
+    else if (a === '--full-legend') opts.fullLegend = true;
     else if (names[a]) {
       if (args[i + 1] === undefined || args[i + 1].startsWith('--')) throw Error('Missing value: ' + a);
       opts[names[a]] = args[++i];
@@ -28,7 +30,7 @@ function parse(args) {
   return opts;
 }
 
-async function sample(input, {size:n, background='auto', whiteThreshold=240}) {
+async function sample(input, {size:n, background='auto', whiteThreshold=240, smoothing=true}) {
   const metadata = await sharp(input).metadata();
   let transparent = false;
   if (background === 'auto' && metadata.hasAlpha) {
@@ -52,13 +54,14 @@ async function sample(input, {size:n, background='auto', whiteThreshold=240}) {
     }
     for (const i of reached) blanks.add(i);
   }
-  const pixelData = cells.map((p,i) => blanks.has(i) ? null : toHex(p.slice(0,3)));
+  const sampled = cells.map((p,i) => blanks.has(i) ? null : toHex(p.slice(0,3)));
+  const pixelData = smoothing ? smoothColors(sampled,n,n).map(c=>c===null?null:c.toUpperCase()) : sampled;
   const counts = new Map();
   for (const c of pixelData) if(c !== null) counts.set(c, (counts.get(c)||0)+1);
   const colors = [...counts].sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0]))
     .map(([hex,count],i)=>({code:String(i+1),hex,rgb:toRgb(hex),count}));
   return {gridSize:n,colorSystem:'FREE_RGB',source:path.basename(input),sampling:'nearest',
-    maxColors:null,background:null,backgroundMode:mode,alphaThreshold:128,whiteThreshold,pixelData,colors};
+    maxColors:null,smoothing:smoothing?'perceptual-color-regions':'none',originalColors:new Set(sampled.filter(c=>c!==null)).size,background:null,backgroundMode:mode,alphaThreshold:128,whiteThreshold,pixelData,colors};
 }
 
 function boardSvg(d, title) {

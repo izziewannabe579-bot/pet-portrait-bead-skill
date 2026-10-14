@@ -18,15 +18,15 @@ async function main() {
   pixels.set([255,255,255,255],(20*n+20)*4);
   pixels.set([0,0,0,255],(20*n+21)*4);
   await sharp(pixels,{raw:{width:n,height:n,channels:4}}).png().toFile(input);
-  const d=await sample(input,{size:n,background:'auto',whiteThreshold:240});
+  const d=await sample(input,{size:n,background:'auto',whiteThreshold:240,smoothing:false});
   ok(d.pixelData.length,2704);ok(d.pixelData[0],null);ok(d.pixelData[20*n+20],'#FFFFFF');ok(d.pixelData[20*n+21],'#000000');
   ok(d.colors.length,1024);ok(d.maxColors,null);ok(d.backgroundMode,'white');
   ok(d.pixelData[12*n+15],'#416682');
   const rgbInput=path.join(dir,'rgb.png');
   await sharp(input).removeAlpha().png().toFile(rgbInput);
-  const rgbSample=await sample(rgbInput,{size:n,background:'auto',whiteThreshold:240});
+  const rgbSample=await sample(rgbInput,{size:n,background:'auto',whiteThreshold:240,smoothing:false});
   ok(rgbSample.backgroundMode,'white');ok(rgbSample.pixelData,d.pixelData);
-  const result=await generate({input,out:path.join(dir,'result'),size:n,background:'auto',whiteThreshold:240,title:'猫咪 & <test>',fullLegend:true});
+  const result=await generate({input,out:path.join(dir,'result'),size:n,background:'auto',whiteThreshold:240,smoothing:false,title:'猫咪 & <test>',fullLegend:true});
   ok(result.beads,1024);ok(result.colors,1024);ok(result.outputs.legends.length,7);
   const json=JSON.parse(fs.readFileSync(result.outputs.data,'utf8'));
   ok(json.source,'fixture.png');ok(json.pixelData,d.pixelData);
@@ -37,12 +37,12 @@ async function main() {
   const data=await sharp(result.outputs.import).removeAlpha().raw().toBuffer();
   ok([...data.subarray((12*n+15)*3,(12*n+15)*3+3)],[65,102,130]);
   assert(boardSvg(d,'cat & <test>').includes('cat &amp; &lt;test&gt;'));checks++;
-  await assert.rejects(()=>generate({input,out:path.join(dir,'result'),size:n,background:'auto',whiteThreshold:240,title:'cat'}),/Refusing to overwrite/);checks++;
+  await assert.rejects(()=>generate({input,out:path.join(dir,'result'),size:n,background:'auto',whiteThreshold:240,smoothing:false,title:'cat'}),/Refusing to overwrite/);checks++;
   // Alpha mode retains opaque white even on the canvas boundary.
   const rgba=Buffer.alloc(n*n*4);rgba.set([255,255,255,255],0);rgba.set([14,26,39,255],(25*n+25)*4);
   const alphaInput=path.join(dir,'alpha.png');
   await sharp(rgba,{raw:{width:n,height:n,channels:4}}).png().toFile(alphaInput);
-  const a=await sample(alphaInput,{size:n,background:'auto',whiteThreshold:240});
+  const a=await sample(alphaInput,{size:n,background:'auto',whiteThreshold:240,smoothing:false});
   ok(a.backgroundMode,'alpha');ok(a.pixelData[0],'#FFFFFF');ok(a.pixelData[1],null);ok(a.pixelData[25*n+25],'#0E1A27');
   const none=await sample(input,{size:n,background:'none',whiteThreshold:240});ok(none.pixelData[0],'#FFFFFF');
   // Non-square opaque image: padding remains empty rather than white beads.
@@ -53,6 +53,17 @@ async function main() {
   assert.throws(()=>parse([input,'--out','p','--size','0']));checks++;
   assert.throws(()=>parse([input,'--out','p','--background','bad']));checks++;
   assert.throws(()=>parse([input,'--out','p','--size']));checks++;
+  const reduced=await sample(input,{size:n,background:'auto',whiteThreshold:240});
+  assert(reduced.colors.length < d.colors.length / 4); checks++;
+  ok(reduced.pixelData[20*n+20],'#FFFFFF');ok(reduced.pixelData[20*n+21],'#000000');
+  ok(reduced.pixelData.map(c=>c===null),d.pixelData.map(c=>c===null));
+  ok(parse([input,'--out','p']).smoothing,true);ok(parse([input,'--out','p','--raw-colors']).smoothing,false);
+  const smooth=require('./smooth-colors.cjs');
+  const highContrast=[null,'#ffffff','#000000','#ff0000'];ok(smooth(highContrast,2,2),highContrast);
+  const full=await generate({input,out:path.join(dir,'smooth'),size:n,background:'auto',whiteThreshold:240,title:'Reduced',fullLegend:true});
+  const reducedCsv=fs.readFileSync(full.outputs.csv,'utf8').trim().split('\n').slice(1);
+  ok(reducedCsv.reduce((sum,line)=>sum+Number(line.split(',')[5]),0),1024);
+  ok(full.colors,reduced.colors.length);
   console.log(JSON.stringify({passed:true,checks,temporaryArtifacts:dir},null,2));
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
